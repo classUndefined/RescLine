@@ -12,7 +12,7 @@ ROIS = [ # [ROI, weight]
        ]
 
 #+++++++++++++++++++++++++++++++++Colour and Grayscale++++++++++++++++++++++++++++++++++++++
-green               = [(0, 60, -50, -10, 0, 40)    ]        # generic_green_thresholds
+green               = [(15, 100, -50, -10, 0, 40)    ]        # generic_green_thresholds
 GRAYSCALE_THRESHOLD = [(0, 17, -128, 127, -128, 127)]
 
 #+++++++++++++++++++++++++++++++++Dec. and Def Send- and RecDate++++++++++++++++++++++++++++
@@ -77,7 +77,7 @@ def check_if_green():
     green_act  = False
 
     for r in ROIS:
-     green_blobs = img.find_blobs(green, x_stride=1, pixels_threshold=160, margin=10,area_threshold=200, merge=True)
+     green_blobs = img.find_blobs(green, pixels_threshold=160, margin=5,area_threshold=200, merge=True)
      if green_blobs:
         green_act = True
 
@@ -91,7 +91,7 @@ def find_green_dot():
     green_dot_x       = 0
 
     for r in ROIS:
-     green_blobs = img.find_blobs(green, x_stride=1, pixels_threshold=160, margin=3,area_threshold=200, merge=True)
+     green_blobs = img.find_blobs(green, pixels_threshold=160, margin=5,area_threshold=200, merge=True)
      if green_blobs:
         for green_rect in green_blobs:
           img.draw_rectangle(green_rect.rect())

@@ -129,6 +129,8 @@ while(True):
     if center_pos == None:
         pass
     else:
+        if center_pos < 220/2 + 30 and center_pos > 220/2 - 30:
+            center_pos = 220/2
         spiSendData = bytes([int(center_pos),0,0, 0])
         img.draw_line([int(center_pos), 0, int(center_pos), 120])
 
@@ -158,6 +160,7 @@ while(True):
         print("Green numb: " + str(number_of_green))
         print("Green x: " + str(list_green_rects_x))
         print("Green y: " + str(list_green_rects_y))
+
 
     #+++prints++++
     print("Center pos: " + str(center_pos))
