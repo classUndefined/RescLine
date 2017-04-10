@@ -1,0 +1,185 @@
+#include "mbed.h"
+#include "KeplerBRAIN_V4.h"
+
+
+//      +++++++++++++++++++++++++++++++++++++++++++Receive Cam Values+++++++++++++++++++++++++++++++++++++++++++++++++++++
+//      +                                     Used to communicate with Cam                                               +
+//      ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+void read_cam(uint8_t *cam_value0,uint8_t *cam_value1,uint8_t *cam_value2,uint8_t *cam_value3,uint8_t value0=0,uint8_t value1=0,uint8_t value2=0,uint8_t value3=0)
+{   
+//      Set SPI pin to 0
+    spi_pixy_cs = 0;
+
+//      Give the Cam time to react
+    wait_ms(10);
+
+//      Send and Receive data from the cam
+    *cam_value0 = spi_pixy.write(value0);
+    *cam_value1 = spi_pixy.write(value1);
+    *cam_value2 = spi_pixy.write(value2);
+    *cam_value3 = spi_pixy.write(value3);
+
+//      Wait for exchange processes to happen
+    wait_ms(10);
+
+//      Set SPI pin back to 1
+    spi_pixy_cs = 1;
+}
+
+//        ++++++++++++++++++++++++++++++++++++Global Variables++++++++++++++++++++++++++++++++++++++
+int max_offset   = 40;                 //Maximum offset
+int left_border  = 220/2 - max_offset;   //Maximum deviation from center of line to the left  | Width - max_offset
+int right_border = 220/2 + max_offset;   //Maximum deviation from center of line to the right | Width + max_offset
+
+int status = 0;         //4 stati possible | Status 1 = rescue line | status 2 = turn test
+char textzeile1[16]; 
+char textzeile2[16]; 
+
+//           ++++++++++++++++++++++++++++++++++++++Drive Function++++++++++++++++++++++++++++++++++++++
+//           +                                Main funtion for driving                                +
+//           +                      When called, specify left and right motor speed                   +
+//           ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+void drive(float f_speedLeft, float f_speedRight)
+{
+WRITE_MOTOR_SPEED(1, f_speedLeft);
+WRITE_MOTOR_SPEED(2, f_speedRight);  
+}
+
+//          ++++++++++++++++++++++++++++++++++Direction Functions++++++++++++++++++++++++++++++++++++++
+//Right
+void moveToRight(int center_of_line)
+{
+         drive(0.0, 0.7);      
+}
+
+//Left
+void moveToLeft(int center_of_line)
+{
+        drive(0.7, 0.0);      
+}
+/Turn around
+void turnAround()
+{
+    Timer first:
+             first.start();
+             while(second.read() <= 1.5)
+             {
+                 drive(0.8, (-0.8));
+             }
+             first.stop();
+}
+
+//Forward
+void moveStraight(int center_of_line, int cases)
+{
+        //If no green dot
+        if(cases == 0)
+             drive(0.7, 0.7); 
+             
+        //If green dot left of line
+        if(cases == 1)
+            moveToLeft();
+        
+        //If green dot right of line
+        if(cases == 2)
+            moveToRight();
+        
+        if(cases == 3)
+            turnAround();
+}
+
+
+int main() 
+{
+    
+    KEPLERBRAIN_INIT();
+    
+//    Wait two seconds
+    wait_ms(2000);
+    
+//    ++++++++++++++++++Declare input and output variables++++++++++++++++++++++++
+    uint8_t inp_value0 = 0;  //x-coordinate of blob
+    uint8_t inp_value1 = 0;  //x-coordinate of green
+    uint8_t inp_value2 = 0;  //y-coordinate of green
+    uint8_t inp_value3 = 0;
+    
+    uint8_t out_value0 = 0;
+    uint8_t out_value1 = 0;
+    uint8_t out_value2 = 0;
+    uint8_t out_value3 = 0;
+       
+//    Value of previous call
+    int last_value = 0;  
+  
+    Timer t;
+
+    while(1)
+    {
+     
+    // +++++++++++++++++++++Receive and send values to cam++++++++++++++++++++++++++++++++++++++
+     read_cam(&inp_value0,&inp_value1,&inp_value2,&inp_value3,out_value0,out_value1,out_value2,out_value3);
+     
+    // ++++++++++++++++++++Check if wrong value for turn+++++++++++++++++++++++++++++++++++
+    // ++++++++Value is sometimes wrong due to camera offset to robot+++++++++++++++++++
+     if(last_value <= left_border  && last_value != 0 && inp_value0 == 0) inp_value0 = last_value;
+     if(last_value >= right_border && inp_value0 <= left_border)          inp_value0 = last_value;
+     
+     wait_ms(50);
+     
+    // +++++++++++++++++++++++++++Change status+++++++++++++++++++++++++++++++++++
+    // Rescue Line
+     if(READ_TASTER_PRESSED(1)==1)
+     {
+         status = 1;      
+     }   
+    // Turn test
+     if(READ_TASTER_PRESSED(2)==1)
+     {
+         status = 2;         
+     } 
+     
+     //++++++++++++++++++++++++++++++++Status 1 | Rescue Line++++++++++++++++++++++++
+     if(status==1)
+     {
+         //mid on line
+        if(inp_value0 < right_border && inp_value0 > left_border)
+              moveStraight(inp_value0, inp_value1);         
+         //right of line
+        if(inp_value0 > right_border && inp_value1 == 0)
+            moveToLeft(inp_value0);
+         //right of line
+        if(inp_value0 < left_border && inp_value1 == 0) 
+            moveToRight(inp_value0);         
+     }        
+     
+     //++++++++++++++++++++++++++Befüllen des Arrays zu Ausgabe++++++++++++++++++++++
+     sprintf(textzeile1, "%3u %3u %3u %3u ", inp_value0, inp_value1, inp_value2, inp_value3);
+     //sprintf(textzeile2, "%3u %3u %3u %3u ", L5, L6, L7, L8);   
+       
+     //+++++++++++++++++++++++++++Ausgabe am Display+++++++++++++++++++++++++
+     WRITE_DISPLAY(1, 1, textzeile1);
+     WRITE_DISPLAY(2, 1, textzeile2);
+     
+     //last value is current value
+     last_value = inp_value0;    
+     
+     //++++++++++++++++++++++++++++Status 2 | 90° Turn Test+++++++++++++++++++++++++
+     if(status==2)
+     {         
+        
+        
+        t.start();
+       
+          while(t.read() <= 0.5)
+          {
+               drive(0.7, 0); 
+               sprintf(textzeile1, "%3u %3u %3u %3u ", inp_value0, inp_value1, inp_value2, t.read());
+               WRITE_DISPLAY(1, 1, textzeile1);
+          }
+                    
+        wait_ms(500);
+     }
+    }     
+    
+}
